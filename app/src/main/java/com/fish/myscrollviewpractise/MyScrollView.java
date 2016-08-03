@@ -43,6 +43,7 @@ public class MyScrollView extends FrameLayout {
     private void initScrollView() {
         final ViewConfiguration configuration = ViewConfiguration.get(getContext());
         mTouchSlop = configuration.getScaledTouchSlop();
+        setWillNotDraw(false);
     }
 
 
@@ -70,10 +71,10 @@ public class MyScrollView extends FrameLayout {
                 int delta = (int) (event.getY() - mLastMotionY);
                 if (mIsBeingDragged) {
                     scrollBy(0, -delta);
-                    mLastMotionY= (int) event.getY();
+                    mLastMotionY = (int) event.getY();
                 } else if (Math.abs(delta) > mTouchSlop) {
                     mIsBeingDragged = true;
-                    mLastMotionY= (int) event.getY();
+                    mLastMotionY = (int) event.getY();
                     scrollBy(0, -delta);
                 }
                 break;
@@ -85,4 +86,30 @@ public class MyScrollView extends FrameLayout {
 
         return true;
     }
+
+    @Override
+    protected int computeVerticalScrollOffset() {
+        return Math.max(0, super.computeVerticalScrollOffset());
+    }
+
+    @Override
+    protected int computeVerticalScrollRange() {
+        final int count = getChildCount();
+        final int contentHeight = getHeight() - getPaddingBottom() - getPaddingTop();
+        if (count == 0) {
+            return contentHeight;
+        }
+
+        int scrollRange = getChildAt(0).getBottom();
+        final int scrollY = getScrollY();
+        final int overscrollBottom = Math.max(0, scrollRange - contentHeight);
+//        if (scrollY < 0) {
+//            scrollRange -= scrollY;
+//        } else if (scrollY > overscrollBottom) {
+//            scrollRange += scrollY - overscrollBottom;
+//        }
+
+        return overscrollBottom;
+    }
+
 }
