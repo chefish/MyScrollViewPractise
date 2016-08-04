@@ -4,10 +4,12 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.os.StrictMode;
 import android.util.AttributeSet;
+import android.util.Log;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
+import android.view.ViewParent;
 import android.widget.FrameLayout;
 import android.widget.OverScroller;
 import android.widget.ScrollView;
@@ -17,7 +19,7 @@ import android.widget.Scroller;
  * Created by fish on 16/8/2.
  */
 public class MyScrollView extends FrameLayout {
-
+    private static final String TAG = "MyScrollView";
     private boolean mIsBeingDragged = false;
     /**
      * Position of the last motion event.
@@ -89,23 +91,56 @@ public class MyScrollView extends FrameLayout {
     }
 
     @Override
-    public boolean onTouchEvent(MotionEvent event) {
+    public boolean onTouchEvent(MotionEvent ev) {
         initVelocityTrackerIfNotExists();
-        switch (event.getAction()) {
+        switch (ev.getAction()) {
             case MotionEvent.ACTION_DOWN:
-                mLastMotionY = (int) event.getY();
-                mActivePointerId = event.getPointerId(0);
+                mLastMotionY = (int) ev.getY();
+                mActivePointerId = ev.getPointerId(0);
                 break;
             case MotionEvent.ACTION_MOVE:
-                int delta = (int) (event.getY() - mLastMotionY);
-                if (mIsBeingDragged) {
-                    scrollBy(0, -delta);
-                    mLastMotionY = (int) event.getY();
-                } else if (Math.abs(delta) > mTouchSlop) {
-                    mIsBeingDragged = true;
-                    mLastMotionY = (int) event.getY();
-                    scrollBy(0, -delta);
+                final int activePointerIndex = ev.findPointerIndex(mActivePointerId);
+                if (activePointerIndex == -1) {
+                    Log.e(TAG, "Invalid pointerId=" + mActivePointerId + " in onTouchEvent");
+                    break;
                 }
+
+                final int y = (int) ev.getY(activePointerIndex);
+                int deltaY = mLastMotionY - y;
+                if (!mIsBeingDragged && Math.abs(deltaY) > mTouchSlop) {
+                    final ViewParent parent = getParent();
+                    if (parent != null) {
+                        parent.requestDisallowInterceptTouchEvent(true);
+                    }
+                    mIsBeingDragged = true;
+
+                    //把deltaY弄小一点，这其实无所谓的
+                    if (deltaY > 0) {
+                        deltaY -= mTouchSlop;
+                    } else {
+                        deltaY += mTouchSlop;
+                    }
+                }
+                if (mIsBeingDragged) {
+                    // Scroll to follow the motion event
+                    mLastMotionY = y;
+
+//                    final int oldY = getScrollY();
+                    final int range = getScrollRange();
+//                    final int overscrollMode = getOverScrollMode();
+
+                    // Calling overScrollBy will call onOverScrolled, which
+                    // calls onScrollChanged if applicable.
+                    if (overScrollBy(0, deltaY, 0, getScrollY(), 0, range, 0, mOverscrollDistance, true)) {
+                        //被裁剪了说明滑到头了，此时清除mVelocityTracker，是为了up的时候计算不出速度，速度为0，就没有fling了
+                        // Break our velocity if we hit a scroll barrier.
+                        mVelocityTracker.clear();
+                    }
+
+
+                }
+
+
                 break;
 
             case MotionEvent.ACTION_UP:
@@ -126,7 +161,7 @@ public class MyScrollView extends FrameLayout {
                 break;
         }
         if (mVelocityTracker != null) {
-            mVelocityTracker.addMovement(event);
+            mVelocityTracker.addMovement(ev);
         }
 
         return true;
