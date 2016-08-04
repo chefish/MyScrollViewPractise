@@ -2,6 +2,7 @@ package com.fish.myscrollviewpractise;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.os.StrictMode;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
 import android.view.VelocityTracker;
@@ -26,7 +27,7 @@ public class MyScrollView extends FrameLayout {
     private int mMinimumVelocity;
     private int mMaximumVelocity;
 
-    private Scroller mScroller;
+    private OverScroller mScroller;
 
 
     /* ID of the active pointer. This is used to retain consistency during
@@ -64,7 +65,7 @@ public class MyScrollView extends FrameLayout {
         mMinimumVelocity = configuration.getScaledMinimumFlingVelocity();
         mMaximumVelocity = configuration.getScaledMaximumFlingVelocity();
         setWillNotDraw(false);
-        mScroller = new Scroller(getContext());
+        mScroller = new OverScroller(getContext());
     }
 
 
@@ -110,7 +111,8 @@ public class MyScrollView extends FrameLayout {
                     int initialVelocity = (int) velocityTracker.getYVelocity(mActivePointerId);
 
                     if ((Math.abs(initialVelocity) > mMinimumVelocity)) {
-                        mScroller.startScroll(getScrollX(), getScrollY(), 0, initialVelocity > 0 ? -300 : 300, 4000);
+//                        mScroller.startScroll(getScrollX(), getScrollY(), 0, initialVelocity > 0 ? -300 : 300, 4000);
+                        fling(-initialVelocity);
                         invalidate();
                     }
                     mActivePointerId = INVALID_POINTER;
@@ -123,6 +125,30 @@ public class MyScrollView extends FrameLayout {
         }
 
         return true;
+    }
+
+
+    /**
+     * Fling the scroll view
+     *
+     * @param velocityY The initial velocity in the Y direction. Positive
+     *                  numbers mean that the finger/cursor is moving down the screen,
+     *                  which means we want to scroll towards the top.
+     */
+    public void fling(int velocityY) {
+        if (getChildCount() > 0) {
+            int height = getHeight() - getPaddingBottom() - getPaddingTop();
+            int bottom = getChildAt(0).getHeight();
+
+            mScroller.fling(getScrollX(), getScrollY(), 0, velocityY, 0, 0, 0,
+                    Math.max(0, bottom - height), 0, height/2);
+
+//            if (mFlingStrictSpan == null) {
+//                mFlingStrictSpan = StrictMode.enterCriticalSpan("ScrollView-fling");
+//            }
+
+            postInvalidateOnAnimation();
+        }
     }
 
     @Override
