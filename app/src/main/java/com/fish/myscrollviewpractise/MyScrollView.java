@@ -368,6 +368,14 @@ public class MyScrollView extends FrameLayout {
         awakenScrollBars();
     }
 
+    @Override
+    public void requestDisallowInterceptTouchEvent(boolean disallowIntercept) {
+        if (disallowIntercept) {
+            recycleVelocityTracker();
+        }
+        super.requestDisallowInterceptTouchEvent(disallowIntercept);
+    }
+
     private int getScrollRange() {
         int scrollRange = 0;
         if (getChildCount() > 0) {
