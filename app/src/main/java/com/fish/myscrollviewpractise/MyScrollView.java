@@ -116,7 +116,6 @@ public class MyScrollView extends FrameLayout {
                     mActivePointerId = INVALID_POINTER;
                     endDrag();
                 }
-                mIsBeingDragged = false;
                 break;
         }
         if (mVelocityTracker != null) {
