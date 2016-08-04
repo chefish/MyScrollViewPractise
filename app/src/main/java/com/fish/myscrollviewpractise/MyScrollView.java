@@ -149,10 +149,10 @@ public class MyScrollView extends FrameLayout {
                 final float translateX;
                 final float translateY;
                 if (clipToPadding) {
-                    width = getWidth() - getPaddingLeft()  - getPaddingRight();
-                    height = getHeight() - getPaddingTop()  - getPaddingBottom();
-                    translateX = getPaddingLeft() ;
-                    translateY = getPaddingTop() ;
+                    width = getWidth() - getPaddingLeft() - getPaddingRight();
+                    height = getHeight() - getPaddingTop() - getPaddingBottom();
+                    translateX = getPaddingLeft();
+                    translateY = getPaddingTop();
                 } else {
                     width = getWidth();
                     height = getHeight();
@@ -245,8 +245,6 @@ public class MyScrollView extends FrameLayout {
                 }
 
 
-
-
                 break;
 
             case MotionEvent.ACTION_UP:
@@ -265,6 +263,15 @@ public class MyScrollView extends FrameLayout {
                     endDrag();
                 }
                 break;
+            //如果cancel了就结束滚动
+            case MotionEvent.ACTION_CANCEL:
+                if (mIsBeingDragged && getChildCount() > 0) {
+                    if (mScroller.springBack(getScrollX(), getScrollY(), 0, 0, 0, getScrollRange())) {
+                        postInvalidateOnAnimation();
+                    }
+                    mActivePointerId = INVALID_POINTER;
+                    endDrag();
+                }
         }
         if (mVelocityTracker != null) {
             mVelocityTracker.addMovement(ev);
@@ -296,6 +303,7 @@ public class MyScrollView extends FrameLayout {
             postInvalidateOnAnimation();
         }
     }
+
     @Override
     public void computeScroll() {
         if (mScroller.computeScrollOffset()) {
