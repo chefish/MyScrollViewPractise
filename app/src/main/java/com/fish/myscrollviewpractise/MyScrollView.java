@@ -296,11 +296,25 @@ public class MyScrollView extends FrameLayout {
             postInvalidateOnAnimation();
         }
     }
-
     @Override
     public void computeScroll() {
         if (mScroller.computeScrollOffset()) {
-
+            // This is called at drawing time by ViewGroup.  We don't want to
+            // re-show the scrollbars at this point, which scrollTo will do,
+            // so we replicate most of scrollTo here.
+            //
+            //         It's a little odd to call onScrollChanged from inside the drawing.
+            //
+            //         It is, except when you remember that computeScroll() is used to
+            //         animate scrolling. So unless we want to defer the onScrollChanged()
+            //         until the end of the animated scrolling, we don't really have a
+            //         choice here.
+            //
+            //         I agree.  The alternative, which I think would be worse, is to post
+            //         something and tell the subclasses later.  This is bad because there
+            //         will be a window where mScrollX/Y is different from what the app
+            //         thinks it is.
+            //
             int oldX = getScrollX();
             int oldY = getScrollY();
             int x = mScroller.getCurrX();
@@ -316,7 +330,6 @@ public class MyScrollView extends FrameLayout {
                         0, mOverflingDistance, false);
                 onScrollChanged(getScrollX(), getScrollY(), oldX, oldY);
 
-
                 if (canOverscroll) {
                     if (y < 0 && oldY >= 0) {
                         mEdgeGlowTop.onAbsorb((int) mScroller.getCurrVelocity());
@@ -324,10 +337,12 @@ public class MyScrollView extends FrameLayout {
                         mEdgeGlowBottom.onAbsorb((int) mScroller.getCurrVelocity());
                     }
                 }
-
             }
 
-            postInvalidate();
+            if (!awakenScrollBars()) {
+                // Keep on drawing until the animation has finished.
+                postInvalidateOnAnimation();
+            }
         }
     }
 
