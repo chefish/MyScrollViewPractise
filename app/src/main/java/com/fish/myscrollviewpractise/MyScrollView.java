@@ -4,11 +4,13 @@ import android.annotation.TargetApi;
 import android.content.Context;
 import android.util.AttributeSet;
 import android.view.MotionEvent;
+import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.widget.FrameLayout;
 import android.widget.OverScroller;
 import android.widget.ScrollView;
+import android.widget.Scroller;
 
 /**
  * Created by fish on 16/8/2.
@@ -21,6 +23,22 @@ public class MyScrollView extends FrameLayout {
      */
     private int mLastMotionY;
     private int mTouchSlop;
+    private int mMinimumVelocity;
+    private int mMaximumVelocity;
+
+    private Scroller mScroller;
+
+
+    /* ID of the active pointer. This is used to retain consistency during
+    * drags/flings if multiple pointers are used.
+            */
+    private int mActivePointerId = INVALID_POINTER;
+    private static final int INVALID_POINTER = -1;
+
+    /**
+     * Determines speed during touch scrolling
+     */
+    private VelocityTracker mVelocityTracker;
 
 
     public MyScrollView(Context context) {
@@ -43,7 +61,10 @@ public class MyScrollView extends FrameLayout {
     private void initScrollView() {
         final ViewConfiguration configuration = ViewConfiguration.get(getContext());
         mTouchSlop = configuration.getScaledTouchSlop();
+        mMinimumVelocity = configuration.getScaledMinimumFlingVelocity();
+        mMaximumVelocity = configuration.getScaledMaximumFlingVelocity();
         setWillNotDraw(false);
+        mScroller = new Scroller(getContext());
     }
 
 
@@ -63,9 +84,11 @@ public class MyScrollView extends FrameLayout {
 
     @Override
     public boolean onTouchEvent(MotionEvent event) {
+        initVelocityTrackerIfNotExists();
         switch (event.getAction()) {
             case MotionEvent.ACTION_DOWN:
                 mLastMotionY = (int) event.getY();
+                mActivePointerId = event.getPointerId(0);
                 break;
             case MotionEvent.ACTION_MOVE:
                 int delta = (int) (event.getY() - mLastMotionY);
@@ -80,20 +103,52 @@ public class MyScrollView extends FrameLayout {
                 break;
 
             case MotionEvent.ACTION_UP:
+
+                if (mIsBeingDragged) {
+                    final VelocityTracker velocityTracker = mVelocityTracker;
+                    velocityTracker.computeCurrentVelocity(1000, mMaximumVelocity);
+                    int initialVelocity = (int) velocityTracker.getYVelocity(mActivePointerId);
+
+                    if ((Math.abs(initialVelocity) > mMinimumVelocity)) {
+                        mScroller.startScroll(getScrollX(), getScrollY(), 0, initialVelocity > 0 ? -300 : 300, 4000);
+                        invalidate();
+                    }
+                    mActivePointerId = INVALID_POINTER;
+                    endDrag();
+                }
                 mIsBeingDragged = false;
                 break;
+        }
+        if (mVelocityTracker != null) {
+            mVelocityTracker.addMovement(event);
         }
 
         return true;
     }
 
     @Override
+    public void computeScroll() {
+        if (mScroller.computeScrollOffset()) {
+            scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
+            //view第二次重绘
+            postInvalidate();
+        }
+    }
+
+    private void endDrag() {
+        mIsBeingDragged = false;
+        recycleVelocityTracker();
+    }
+
+    @Override
     protected int computeVerticalScrollOffset() {
+//        LogUtil.fish("computeVerticalScrollOffset");
         return Math.max(0, super.computeVerticalScrollOffset());
     }
 
     @Override
     protected int computeVerticalScrollRange() {
+//        LogUtil.fish("computeVerticalScrollRange");
         final int count = getChildCount();
         final int contentHeight = getHeight() - getPaddingBottom() - getPaddingTop();
         if (count == 0) {
@@ -110,6 +165,27 @@ public class MyScrollView extends FrameLayout {
 //        }
 
         return overscrollBottom;
+    }
+
+    private void initOrResetVelocityTracker() {
+        if (mVelocityTracker == null) {
+            mVelocityTracker = VelocityTracker.obtain();
+        } else {
+            mVelocityTracker.clear();
+        }
+    }
+
+    private void initVelocityTrackerIfNotExists() {
+        if (mVelocityTracker == null) {
+            mVelocityTracker = VelocityTracker.obtain();
+        }
+    }
+
+    private void recycleVelocityTracker() {
+        if (mVelocityTracker != null) {
+            mVelocityTracker.recycle();
+            mVelocityTracker = null;
+        }
     }
 
 }
