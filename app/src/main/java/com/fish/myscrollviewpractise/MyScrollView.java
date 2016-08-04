@@ -27,6 +27,9 @@ public class MyScrollView extends FrameLayout {
     private int mMinimumVelocity;
     private int mMaximumVelocity;
 
+    private int mOverscrollDistance;
+    private int mOverflingDistance;
+
     private OverScroller mScroller;
 
 
@@ -64,6 +67,8 @@ public class MyScrollView extends FrameLayout {
         mTouchSlop = configuration.getScaledTouchSlop();
         mMinimumVelocity = configuration.getScaledMinimumFlingVelocity();
         mMaximumVelocity = configuration.getScaledMaximumFlingVelocity();
+        mOverscrollDistance = configuration.getScaledOverscrollDistance();
+        mOverflingDistance = configuration.getScaledOverflingDistance();
         setWillNotDraw(false);
         mScroller = new OverScroller(getContext());
     }
@@ -141,7 +146,7 @@ public class MyScrollView extends FrameLayout {
             int bottom = getChildAt(0).getHeight();
 
             mScroller.fling(getScrollX(), getScrollY(), 0, velocityY, 0, 0, 0,
-                    Math.max(0, bottom - height), 0, height/2);
+                    Math.max(0, bottom - height), 0, height / 2);
 
 //            if (mFlingStrictSpan == null) {
 //                mFlingStrictSpan = StrictMode.enterCriticalSpan("ScrollView-fling");
@@ -154,10 +159,58 @@ public class MyScrollView extends FrameLayout {
     @Override
     public void computeScroll() {
         if (mScroller.computeScrollOffset()) {
-            scrollTo(mScroller.getCurrX(), mScroller.getCurrY());
-            //view第二次重绘
+
+            int oldX = getScrollX();
+            int oldY = getScrollY();
+            int x = mScroller.getCurrX();
+            int y = mScroller.getCurrY();
+
+            if (oldX != x || oldY != y) {
+                final int range = getScrollRange();
+                final int overscrollMode = getOverScrollMode();
+                final boolean canOverscroll = overscrollMode == OVER_SCROLL_ALWAYS ||
+                        (overscrollMode == OVER_SCROLL_IF_CONTENT_SCROLLS && range > 0);
+
+                overScrollBy(x - oldX, y - oldY, oldX, oldY, 0, range,
+                        0, mOverflingDistance, false);
+                onScrollChanged(getScrollX(), getScrollY(), oldX, oldY);
+
+            }
+
             postInvalidate();
         }
+    }
+
+    @Override
+    protected void onOverScrolled(int scrollX, int scrollY,
+                                  boolean clampedX, boolean clampedY) {
+        // Treat animating scrolls differently; see #computeScroll() for why.
+        if (!mScroller.isFinished()) {
+            final int oldX = getScrollX();
+            final int oldY = getScrollY();
+            setScrollX(scrollX);
+            setScrollY(scrollY);
+//            invalidateParentIfNeeded();
+            //源码里有这句，但是我觉得没必要写
+            onScrollChanged(getScrollX(), getScrollY(), oldX, oldY);
+            if (clampedY) {
+                mScroller.springBack(getScrollX(), getScrollY(), 0, 0, 0, getScrollRange());
+            }
+        } else {
+            super.scrollTo(scrollX, scrollY);
+        }
+
+        awakenScrollBars();
+    }
+
+    private int getScrollRange() {
+        int scrollRange = 0;
+        if (getChildCount() > 0) {
+            View child = getChildAt(0);
+            scrollRange = Math.max(0,
+                    child.getHeight() - (getHeight() - getPaddingBottom() - getPaddingTop()));
+        }
+        return scrollRange;
     }
 
     private void endDrag() {
