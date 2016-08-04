@@ -2,6 +2,7 @@ package com.fish.myscrollviewpractise;
 
 import android.annotation.TargetApi;
 import android.content.Context;
+import android.graphics.Canvas;
 import android.os.StrictMode;
 import android.util.AttributeSet;
 import android.util.Log;
@@ -10,6 +11,7 @@ import android.view.VelocityTracker;
 import android.view.View;
 import android.view.ViewConfiguration;
 import android.view.ViewParent;
+import android.widget.EdgeEffect;
 import android.widget.FrameLayout;
 import android.widget.OverScroller;
 import android.widget.ScrollView;
@@ -33,6 +35,9 @@ public class MyScrollView extends FrameLayout {
     private int mOverflingDistance;
 
     private OverScroller mScroller;
+
+    private EdgeEffect mEdgeGlowTop;
+    private EdgeEffect mEdgeGlowBottom;
 
 
     /* ID of the active pointer. This is used to retain consistency during
@@ -90,6 +95,82 @@ public class MyScrollView extends FrameLayout {
         child.measure(childWidthMeasureSpec, childHeightMeasureSpec);
     }
 
+
+    //在view的init里面被调用
+    @Override
+    public void setOverScrollMode(int mode) {
+        if (mode != OVER_SCROLL_NEVER) {
+            if (mEdgeGlowTop == null) {
+                Context context = getContext();
+                mEdgeGlowTop = new EdgeEffect(context);
+                mEdgeGlowBottom = new EdgeEffect(context);
+            }
+        } else {
+            mEdgeGlowTop = null;
+            mEdgeGlowBottom = null;
+        }
+        super.setOverScrollMode(mode);
+    }
+
+    @Override
+    public void draw(Canvas canvas) {
+        super.draw(canvas);
+        if (mEdgeGlowTop != null) {
+            final int scrollY = getScrollY();
+            final boolean clipToPadding = getClipToPadding();
+            if (!mEdgeGlowTop.isFinished()) {
+                final int restoreCount = canvas.save();
+                final int width;
+                final int height;
+                final float translateX;
+                final float translateY;
+                if (clipToPadding) {
+                    width = getWidth() - getPaddingLeft() - getPaddingRight();
+                    height = getHeight() - getPaddingTop() - getPaddingBottom();
+                    translateX = getPaddingLeft();
+                    translateY = getPaddingTop();
+                } else {
+                    width = getWidth();
+                    height = getHeight();
+                    translateX = 0;
+                    translateY = 0;
+                }
+                canvas.translate(translateX, Math.min(0, scrollY) + translateY);
+                mEdgeGlowTop.setSize(width, height);
+                if (mEdgeGlowTop.draw(canvas)) {
+                    postInvalidateOnAnimation();
+                }
+                canvas.restoreToCount(restoreCount);
+            }
+            if (!mEdgeGlowBottom.isFinished()) {
+                final int restoreCount = canvas.save();
+                final int width;
+                final int height;
+                final float translateX;
+                final float translateY;
+                if (clipToPadding) {
+                    width = getWidth() - getPaddingLeft()  - getPaddingRight();
+                    height = getHeight() - getPaddingTop()  - getPaddingBottom();
+                    translateX = getPaddingLeft() ;
+                    translateY = getPaddingTop() ;
+                } else {
+                    width = getWidth();
+                    height = getHeight();
+                    translateX = 0;
+                    translateY = 0;
+                }
+                canvas.translate(-width + translateX,
+                        Math.max(getScrollRange(), scrollY) + height + translateY);
+                canvas.rotate(180, width, 0);
+                mEdgeGlowBottom.setSize(width, height);
+                if (mEdgeGlowBottom.draw(canvas)) {
+                    postInvalidateOnAnimation();
+                }
+                canvas.restoreToCount(restoreCount);
+            }
+        }
+    }
+
     @Override
     public boolean onTouchEvent(MotionEvent ev) {
         initVelocityTrackerIfNotExists();
@@ -125,9 +206,11 @@ public class MyScrollView extends FrameLayout {
                     // Scroll to follow the motion event
                     mLastMotionY = y;
 
-//                    final int oldY = getScrollY();
+                    final int oldY = getScrollY();
                     final int range = getScrollRange();
-//                    final int overscrollMode = getOverScrollMode();
+                    final int overscrollMode = getOverScrollMode();
+                    boolean canOverscroll = overscrollMode == OVER_SCROLL_ALWAYS ||
+                            (overscrollMode == OVER_SCROLL_IF_CONTENT_SCROLLS && range > 0);
 
                     // Calling overScrollBy will call onOverScrolled, which
                     // calls onScrollChanged if applicable.
@@ -137,8 +220,31 @@ public class MyScrollView extends FrameLayout {
                         mVelocityTracker.clear();
                     }
 
+                    if (canOverscroll) {
+                        final int pulledToY = oldY + deltaY;
+                        if (pulledToY < 0) {
+                            mEdgeGlowTop.onPull((float) deltaY / getHeight(),
+                                    ev.getX(activePointerIndex) / getWidth());
+                            if (!mEdgeGlowBottom.isFinished()) {
+                                mEdgeGlowBottom.onRelease();
+                            }
+                        } else if (pulledToY > range) {
+                            mEdgeGlowBottom.onPull((float) deltaY / getHeight(),
+                                    1.f - ev.getX(activePointerIndex) / getWidth());
+                            if (!mEdgeGlowTop.isFinished()) {
+                                mEdgeGlowTop.onRelease();
+                            }
+                        }
+                        if (mEdgeGlowTop != null
+                                && (!mEdgeGlowTop.isFinished() || !mEdgeGlowBottom.isFinished())) {
+                            postInvalidateOnAnimation();
+                        }
+                    }
+
 
                 }
+
+
 
 
                 break;
@@ -210,6 +316,15 @@ public class MyScrollView extends FrameLayout {
                         0, mOverflingDistance, false);
                 onScrollChanged(getScrollX(), getScrollY(), oldX, oldY);
 
+
+                if (canOverscroll) {
+                    if (y < 0 && oldY >= 0) {
+                        mEdgeGlowTop.onAbsorb((int) mScroller.getCurrVelocity());
+                    } else if (y > range && oldY <= range) {
+                        mEdgeGlowBottom.onAbsorb((int) mScroller.getCurrVelocity());
+                    }
+                }
+
             }
 
             postInvalidate();
@@ -250,7 +365,14 @@ public class MyScrollView extends FrameLayout {
 
     private void endDrag() {
         mIsBeingDragged = false;
+
         recycleVelocityTracker();
+
+        if (mEdgeGlowTop != null) {
+            mEdgeGlowTop.onRelease();
+            mEdgeGlowBottom.onRelease();
+        }
+
     }
 
     @Override
