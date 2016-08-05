@@ -112,6 +112,133 @@ public class MyScrollView extends FrameLayout {
         super.setOverScrollMode(mode);
     }
 
+
+    @Override
+    public boolean onInterceptTouchEvent(MotionEvent ev) {
+        /*
+         * This method JUST determines whether we want to intercept the motion.
+         * If we return true, onMotionEvent will be called and we do the actual
+         * scrolling there.
+         */
+
+        /*
+        * Shortcut the most recurring case: the user is in the dragging
+        * state and he is moving his finger.  We want to intercept this
+        * motion.
+        */
+        final int action = ev.getAction();
+        if ((action == MotionEvent.ACTION_MOVE) && (mIsBeingDragged)) {
+            return true;
+        }
+
+        /*
+         * Don't try to intercept touch if we can't scroll anyway.
+         */
+        if (getScrollY() == 0 && !canScrollVertically(1)) {
+            return false;
+        }
+
+        switch (action & MotionEvent.ACTION_MASK) {
+            //down事件child处理的，我有权截获move事件
+            case MotionEvent.ACTION_MOVE: {
+                /*
+                 * mIsBeingDragged == false, otherwise the shortcut would have caught it. Check
+                 * whether the user has moved far enough from his original down touch.
+                 */
+
+                /*
+                * Locally do absolute value. mLastMotionY is set to the y value
+                * of the down event.
+                */
+                final int activePointerId = mActivePointerId;
+                if (activePointerId == INVALID_POINTER) {
+                    // If we don't have a valid id, the touch down wasn't on content.
+                    break;
+                }
+
+                final int pointerIndex = ev.findPointerIndex(activePointerId);
+                if (pointerIndex == -1) {
+                    Log.e(TAG, "Invalid pointerId=" + activePointerId
+                            + " in onInterceptTouchEvent");
+                    break;
+                }
+
+                final int y = (int) ev.getY(pointerIndex);
+                final int yDiff = Math.abs(y - mLastMotionY);
+                if (yDiff > mTouchSlop && (getNestedScrollAxes() & SCROLL_AXIS_VERTICAL) == 0) {
+                    mIsBeingDragged = true;
+                    mLastMotionY = y;
+                    initVelocityTrackerIfNotExists();
+                    mVelocityTracker.addMovement(ev);
+
+                    final ViewParent parent = getParent();
+                    if (parent != null) {
+                        parent.requestDisallowInterceptTouchEvent(true);
+                    }
+                }
+                break;
+            }
+
+            //配合完成fling时，点击停止滚动
+            case MotionEvent.ACTION_DOWN: {
+                final int y = (int) ev.getY();
+                if (!inChild((int) ev.getX(), (int) y)) {
+                    mIsBeingDragged = false;
+                    recycleVelocityTracker();
+                    break;
+                }
+
+                /*
+                 * Remember location of down touch.
+                 * ACTION_DOWN always refers to pointer index 0.
+                 */
+                mLastMotionY = y;
+                mActivePointerId = ev.getPointerId(0);
+
+                initOrResetVelocityTracker();
+                mVelocityTracker.addMovement(ev);
+                /*
+                * If being flinged and user touches the screen, initiate drag;
+                * otherwise don't.  mScroller.isFinished should be false when
+                * being flinged.
+                */
+                mIsBeingDragged = !mScroller.isFinished();
+
+                break;
+            }
+
+            case MotionEvent.ACTION_CANCEL:
+            case MotionEvent.ACTION_UP:
+                /* Release the drag */
+                mIsBeingDragged = false;
+                mActivePointerId = INVALID_POINTER;
+                recycleVelocityTracker();
+                if (mScroller.springBack(getScrollX(), getScrollY(), 0, 0, 0, getScrollRange())) {
+                    postInvalidateOnAnimation();
+                }
+                break;
+
+        }
+
+        /*
+        * The only time we want to intercept motion events is if we are in the
+        * drag mode.
+        */
+        return mIsBeingDragged;
+    }
+
+    private boolean inChild(int x, int y) {
+        if (getChildCount() > 0) {
+            final int scrollY = getScrollY();
+            final View child = getChildAt(0);
+            return !(y < child.getTop() - scrollY
+                    || y >= child.getBottom() - scrollY
+                    || x < child.getLeft()
+                    || x >= child.getRight());
+        }
+        return false;
+    }
+
     @Override
     public void draw(Canvas canvas) {
         super.draw(canvas);
